@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Mirror Strike</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; font-family: monospace; }
+canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; touch-action: none; }
+
+#startScreen {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.75);
+  transition: opacity 0.5s;
+}
+#startScreen.hidden { opacity: 0; pointer-events: none; }
+
+.start-inner { text-align: center; }
+
+.tagline {
+  color: rgba(0, 220, 255, 0.7);
+  font-size: 13px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  margin-top: 12px;
+  margin-bottom: 32px;
+}
+
+.tap-hint {
+  color: rgba(255,255,255,0.5);
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  animation: blink 1.5s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:0.4} 50%{opacity:1} }
+
+#hud {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 5;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 20px;
+  pointer-events: none;
+  display: none;
+}
+#scoreDisplay { color: #00DCFF; font-size: 14px; letter-spacing: 0.15em; }
+#livesDisplay { display: flex; gap: 8px; }
+.life-shard { width: 10px; height: 16px; background: #00DCFF; clip-path: polygon(50% 0%, 100% 40%, 75% 100%, 25% 100%, 0% 40%); transition: opacity 0.3s; }
+.life-shard.dead { opacity: 0.15; background: #333; }
+#levelDisplay { color: rgba(255,255,255,0.4); font-size: 12px; letter-spacing: 0.2em; }
+
+#gameOver {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.85);
+  display: none;
+}
+.go-title { color: #FF2080; font-size: 32px; letter-spacing: 0.3em; margin-bottom: 16px; }
+.go-score { color: #00DCFF; font-size: 18px; letter-spacing: 0.2em; margin-bottom: 8px; }
+.go-best { color: rgba(0,220,255,0.5); font-size: 13px; letter-spacing: 0.15em; margin-bottom: 32px; }
+.go-tap { color: rgba(255,255,255,0.5); font-size: 12px; letter-spacing: 0.3em; animation: blink 1.5s ease-in-out infinite; }
+
+#levelAnn {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  z-index: 8; text-align: center; pointer-events: none;
+  display: none;
+}
+.la-level { color: rgba(255,255,255,0.3); font-size: 11px; letter-spacing: 0.4em; text-transform: uppercase; margin-bottom: 6px; }
+.la-name { color: #00DCFF; font-size: 24px; letter-spacing: 0.25em; }
+
+#credits {
+  position: fixed; bottom: 48px; right: 16px; color: rgba(255,255,255,0.2);
+  font-size: 11px; z-index: 5; pointer-events: none; display: none;
+  text-align: right; line-height: 1.6;
+}
+</style>
+</head>
+<body>
+
+<div id="startScreen">
+  <div class="start-inner">
+    <!-- SVG Option A: glowing title -->
+    <svg width="100%" height="110" viewBox="0 0 500 110" xmlns="http://www.w3.org/2000/svg" style="max-width:480px; overflow:visible; display:block; margin: 0 auto;">
+      <defs>
+        <filter id="titleGlow" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+          <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+        </filter>
+      </defs>
+      <!-- Option B: SVG paddle icon above title -->
+      <g transform="translate(250, 22)">
+        <defs>
+          <filter id="iconGlow">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="b"/>
+            <feComposite in="SourceGraphic" in2="b" operator="over"/>
+          </filter>
+        </defs>
+        <!-- Paddle: horizontal bar -->
+        <rect x="-28" y="-3" width="56" height="6" rx="3" fill="none" stroke="#00DCFF" stroke-width="2" filter="url(#iconGlow)"
+              style="animation: iconPulse 2s ease-in-out infinite;"/>
+        <!-- Bolt: diagonal line -->
+        <line x1="-16" y1="-16" x2="16" y2="16" stroke="#FF2080" stroke-width="2" filter="url(#iconGlow)"
+              style="animation: iconPulse 2s ease-in-out 0.5s infinite;"/>
+        <!-- Crystal: diamond shape -->
+        <polygon points="-40,-20 -32,-28 -24,-20 -32,-12" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" filter="url(#iconGlow)"/>
+      </g>
+      <text x="250" y="88" text-anchor="middle"
+            font-family="monospace" font-size="44" font-weight="900" letter-spacing="10"
+            fill="#00DCFF"
+            filter="url(#titleGlow)"
+            style="animation: titleReveal 1.2s ease-out forwards; opacity:0;">
+        MIRROR STRIKE
+      </text>
+    </svg>
+    <style>
+      @keyframes titleReveal {
+        from { opacity: 0; letter-spacing: 22px; }
+        to   { opacity: 1; letter-spacing: 10px; }
+      }
+      @keyframes iconPulse {
+        0%,100% { opacity: 1; }
+        50%      { opacity: 0.4; }
+      }
+    </style>
+    <!-- SVG Option C: corner brackets -->
+    <svg style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:11;" viewBox="0 0 100 100" preserveAspectRatio="none">
+      <polyline points="2,14 2,2 14,2"   fill="none" stroke="#00DCFF" stroke-width="0.4" vector-effect="non-scaling-stroke"
+                style="stroke-dasharray:30;stroke-dashoffset:30;animation:drawBracket 0.7s ease-out 0.3s forwards;"/>
+      <polyline points="86,2 98,2 98,14"  fill="none" stroke="#00DCFF" stroke-width="0.4" vector-effect="non-scaling-stroke"
+                style="stroke-dasharray:30;stroke-dashoffset:30;animation:drawBracket 0.7s ease-out 0.4s forwards;"/>
+      <polyline points="2,86 2,98 14,98"  fill="none" stroke="#00DCFF" stroke-width="0.4" vector-effect="non-scaling-stroke"
+                style="stroke-dasharray:30;stroke-dashoffset:30;animation:drawBracket 0.7s ease-out 0.5s forwards;"/>
+      <polyline points="86,98 98,98 98,86" fill="none" stroke="#00DCFF" stroke-width="0.4" vector-effect="non-scaling-stroke"
+                style="stroke-dasharray:30;stroke-dashoffset:30;animation:drawBracket 0.7s ease-out 0.6s forwards;"/>
+      <style>@keyframes drawBracket { to { stroke-dashoffset: 0; } }</style>
+    </svg>
+    <p class="tagline">Reflect · Ricochet · Shatter</p>
+    <p class="tap-hint">Tap to Begin</p>
+  </div>
+</div>
+
+<div id="hud">
+  <div id="scoreDisplay">SCORE <span id="scoreVal">0</span></div>
+  <div id="livesDisplay">
+    <div class="life-shard" id="life0"></div>
+    <div class="life-shard" id="life1"></div>
+    <div class="life-shard" id="life2"></div>
+  </div>
+  <div id="levelDisplay">LV <span id="levelVal">1</span></div>
+</div>
+
+<div id="levelAnn">
+  <div class="la-level">Level</div>
+  <div class="la-name" id="laName">-</div>
+</div>
+
+<div id="gameOver">
+  <div class="go-title">SHATTERED</div>
+  <div class="go-score">Score: <span id="goScore">0</span></div>
+  <div class="go-best">Best: <span id="goBest">0</span></div>
+  <div class="go-tap">Tap to Retry</div>
+</div>
+
+<div id="credits">A game by Nishi Vector<br>Three.js + Tone.js · 2026</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tone@15.1.22/dist/Tone.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.183.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+// ─── Constants ─────────────────────────────────────────────────────────────
+const SCORE_KEY = 'mirror-strike-highscore';
+function getHighScore() { return parseInt(localStorage.getItem(SCORE_KEY) || '0'); }
+function saveHighScore(s) { if (s > getHighScore()) localStorage.setItem(SCORE_KEY, s); }
+
+const COLORS = {
+  bg: 0x000814,
+  paddle: 0x00DCFF,
+  bolt: 0xFF2080,
+  crystal: 0xFFFFFF,
+  shieldCrystal: 0xFFAA00,
+  wall: 0x00DCFF,
+  accent: 0x44FFAA,
+};
+
+// Level config
+const LEVELS = [
+  { name: 'Crystal Calm',   crystals: 5,  bolts: 1, boltSpeed: 280, shielded: 0, orbitSpeed: 0.25 },
+  { name: 'Dual Strike',    crystals: 6,  bolts: 2, boltSpeed: 320, shielded: 1, orbitSpeed: 0.30 },
+  { name: 'Rapid Scatter',  crystals: 7,  bolts: 2, boltSpeed: 370, shielded: 2, orbitSpeed: 0.38 },
+  { name: 'Chaos Mirror',   crystals: 8,  bolts: 3, boltSpeed: 420, shielded: 3, orbitSpeed: 0.45 },
+  { name: 'Total Fracture', crystals: 10, bolts: 3, boltSpeed: 480, shielded: 4, orbitSpeed: 0.55 },
+];
+
+// ─── Scene Setup ────────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+const canvas = renderer.domElement;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(COLORS.bg);
+
+// Orthographic camera — pixel coords
+let W = window.innerWidth, H = window.innerHeight;
+const camera = new THREE.OrthographicCamera(-W/2, W/2, H/2, -H/2, 0.1, 100);
+camera.position.set(0, 0, 10);
+
+// Post-processing
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 1.6, 0.4, 0.1);
+composer.addPass(bloom);
+
+// ─── Game State ─────────────────────────────────────────────────────────────
+let gameState = 'idle'; // idle | playing | dying | gameover
+let score = 0;
+let lives = 3;
+let level = 0;
+let crystalsLeft = 0;
+let paddleAngle = 0;
+let pointerX = 0, pointerY = 0;
+let respawnTimer = 0;
+let levelAnnTimer = 0;
+let cameraShakeTimer = 0, cameraShakeMag = 0;
+
+// ─── 3D Objects ─────────────────────────────────────────────────────────────
+const group = new THREE.Group();
+scene.add(group);
+
+// Arena boundary
+const arenaSize = Math.min(W, H) * 0.42;
+let arenaW = arenaSize * 1.2, arenaH = arenaSize;
+// for portrait mode
+if (W / H < 1) { arenaW = arenaSize * 0.95; arenaH = arenaSize * 1.1; }
+
+// Wall mesh (line box)
+function makeArena() {
+  const mat = new THREE.LineBasicMaterial({ color: COLORS.wall, linewidth: 1 });
+  const pts = [
+    new THREE.Vector3(-arenaW/2, -arenaH/2, 0),
+    new THREE.Vector3( arenaW/2, -arenaH/2, 0),
+    new THREE.Vector3( arenaW/2,  arenaH/2, 0),
+    new THREE.Vector3(-arenaW/2,  arenaH/2, 0),
+    new THREE.Vector3(-arenaW/2, -arenaH/2, 0),
+  ];
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const line = new THREE.Line(geo, mat);
+  group.add(line);
+  return line;
+}
+makeArena();
+
+// Grid (faint background)
+function makeGrid() {
+  const mat = new THREE.LineBasicMaterial({ color: 0x001a2e, transparent: true, opacity: 0.6 });
+  const pts = [];
+  const step = 40;
+  for (let x = -arenaW/2; x <= arenaW/2; x += step) {
+    pts.push(new THREE.Vector3(x, -arenaH/2, -0.1));
+    pts.push(new THREE.Vector3(x,  arenaH/2, -0.1));
+  }
+  for (let y = -arenaH/2; y <= arenaH/2; y += step) {
+    pts.push(new THREE.Vector3(-arenaW/2, y, -0.1));
+    pts.push(new THREE.Vector3( arenaW/2, y, -0.1));
+  }
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const segs = new THREE.LineSegments(geo, mat);
+  group.add(segs);
+}
+makeGrid();
+
+// Paddle (centered, rotates based on pointer)
+const paddleLen = Math.min(arenaW, arenaH) * 0.18;
+const paddleMat = new THREE.MeshBasicMaterial({ color: COLORS.paddle });
+const paddleGeo = new THREE.PlaneGeometry(paddleLen, 4);
+const paddleMesh = new THREE.Mesh(paddleGeo, paddleMat);
+group.add(paddleMesh);
+
+// Glow ring around center
+const ringGeo = new THREE.RingGeometry(18, 22, 32);
+const ringMat = new THREE.MeshBasicMaterial({ color: COLORS.paddle, transparent: true, opacity: 0.25, side: THREE.DoubleSide });
+const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+group.add(ringMesh);
+
+// Bolt pool
+const MAX_BOLTS = 3;
+const bolts = [];
+for (let i = 0; i < MAX_BOLTS; i++) {
+  const geo = new THREE.PlaneGeometry(14, 4);
+  const mat = new THREE.MeshBasicMaterial({ color: COLORS.bolt, transparent: true, opacity: 0 });
+  const mesh = new THREE.Mesh(geo, mat);
+  group.add(mesh);
+  bolts.push({ mesh, active: false, vx: 0, vy: 0, angle: 0, trail: [] });
+}
+
+// Trail pool for bolts
+const trailPool = [];
+for (let i = 0; i < 60; i++) {
+  const geo = new THREE.PlaneGeometry(6, 2);
+  const mat = new THREE.MeshBasicMaterial({ color: COLORS.bolt, transparent: true, opacity: 0 });
+  const mesh = new THREE.Mesh(geo, mat);
+  group.add(mesh);
+  trailPool.push({ mesh, life: 0 });
+}
+
+// Crystal pool
+const MAX_CRYSTALS = 12;
+const crystalObjs = [];
+for (let i = 0; i < MAX_CRYSTALS; i++) {
+  const geo = new THREE.BufferGeometry();
+  const verts = new Float32Array([
+    0, 12, 0,   8, 0, 0,   0, -10, 0,
+    0, 12, 0,   0, -10, 0, -8, 0, 0,
+  ]);
+  geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  const mat = new THREE.MeshBasicMaterial({ color: COLORS.crystal, transparent: true, opacity: 0, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geo, mat);
+  group.add(mesh);
+
+  // Shield ring
+  const shGeo = new THREE.RingGeometry(16, 18, 6);
+  const shMat = new THREE.MeshBasicMaterial({ color: COLORS.shieldCrystal, transparent: true, opacity: 0, side: THREE.DoubleSide });
+  const shMesh = new THREE.Mesh(shGeo, shMat);
+  group.add(shMesh);
+
+  crystalObjs.push({
+    mesh, shMesh,
+    active: false,
+    orbitAngle: 0,
+    orbitRadius: 0,
+    orbitSpeed: 0,
+    hp: 1,
+    shielded: false,
+  });
+}
+
+// Particle pool for shatter effect
+const MAX_PARTICLES = 80;
+const particles = [];
+for (let i = 0; i < MAX_PARTICLES; i++) {
+  const geo = new THREE.PlaneGeometry(4, 4);
+  const mat = new THREE.MeshBasicMaterial({ color: COLORS.crystal, transparent: true, opacity: 0 });
+  const mesh = new THREE.Mesh(geo, mat);
+  group.add(mesh);
+  particles.push({ mesh, active: false, vx: 0, vy: 0, life: 0, maxLife: 0 });
+}
+
+// Wall flash planes
+const wallFlashes = [];
+const wallDefs = [
+  { pos: [0, arenaH/2+2], size: [arenaW+4, 6] },
+  { pos: [0, -arenaH/2-2], size: [arenaW+4, 6] },
+  { pos: [arenaW/2+2, 0], size: [6, arenaH+4] },
+  { pos: [-arenaW/2-2, 0], size: [6, arenaH+4] },
+];
+wallDefs.forEach(d => {
+  const geo = new THREE.PlaneGeometry(d.size[0], d.size[1]);
+  const mat = new THREE.MeshBasicMaterial({ color: COLORS.paddle, transparent: true, opacity: 0 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(d.pos[0], d.pos[1], 0);
+  group.add(mesh);
+  wallFlashes.push({ mesh, life: 0, wall: 0 });
+});
+
+// ─── Audio ──────────────────────────────────────────────────────────────────
+let audioReady = false;
+let synthPing, synthBoom, synthCrunch, synthDeath, synthFire, synthWin;
+let bgDrone, bgLFO;
+
+async function initAudio() {
+  if (audioReady) return;
+  await Tone.start();
+  audioReady = true;
+
+  // Bounce ping — crystalline
+  synthPing = new Tone.Synth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.08 },
+    volume: -8
+  }).toDestination();
+
+  // Crystal shatter
+  synthCrunch = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.001, decay: 0.18, sustain: 0, release: 0.08 },
+    volume: -14
+  }).toDestination();
+
+  // New bolt fire — deep bass pulse
+  synthFire = new Tone.MembraneSynth({
+    pitchDecay: 0.08, octaves: 4,
+    envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.1 },
+    volume: -10
+  }).toDestination();
+
+  // Death sound
+  synthDeath = new Tone.Synth({
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.01, decay: 0.4, sustain: 0, release: 0.2 },
+    volume: -12
+  }).toDestination();
+
+  // Win fanfare
+  synthWin = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.02, decay: 0.3, sustain: 0.1, release: 0.4 },
+    volume: -10
+  }).toDestination();
+
+  // Background drone: single bass at 55Hz, slow LFO tremolo, 80bpm
+  bgDrone = new Tone.Synth({
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.5, decay: 0, sustain: 1, release: 1 },
+    volume: -24
+  }).toDestination();
+
+  bgLFO = new Tone.LFO({ frequency: '0.5hz', min: -28, max: -20 });
+  bgLFO.connect(bgDrone.volume);
+  bgLFO.start();
+}
+
+function playPing(note='C5') {
+  if (!audioReady) return;
+  try { synthPing.triggerAttackRelease(note, '8n'); } catch(e) {}
+}
+function playCrunch() {
+  if (!audioReady) return;
+  try { synthCrunch.triggerAttackRelease('8n'); } catch(e) {}
+}
+function playFire() {
+  if (!audioReady) return;
+  try { synthFire.triggerAttackRelease('C1', '8n'); } catch(e) {}
+}
+function playDeath() {
+  if (!audioReady) return;
+  try { synthDeath.triggerAttackRelease('A2', '4n'); } catch(e) {}
+}
+function playWin() {
+  if (!audioReady) return;
+  try { synthWin.triggerAttackRelease(['C5','E5','G5'], '4n'); } catch(e) {}
+}
+function startDrone() {
+  if (!audioReady || !bgDrone) return;
+  try { bgDrone.triggerAttack('C1'); bgLFO.start(); } catch(e) {}
+}
+function stopDrone() {
+  if (!audioReady || !bgDrone) return;
+  try { bgDrone.triggerRelease(); } catch(e) {}
+}
+
+// ─── Game Logic ─────────────────────────────────────────────────────────────
+function getFreeBolt() {
+  return bolts.find(b => !b.active) || null;
+}
+
+function getFreeCrystal() {
+  return crystalObjs.find(c => !c.active) || null;
+}
+
+function getFreeParticle() {
+  return particles.find(p => !p.active) || null;
+}
+
+function fireBolt(speedOverride) {
+  const bolt = getFreeBolt();
+  if (!bolt) return;
+  const speed = speedOverride || LEVELS[level].boltSpeed;
+  const angle = Math.random() * Math.PI * 2;
+  bolt.vx = Math.cos(angle) * speed;
+  bolt.vy = Math.sin(angle) * speed;
+  bolt.mesh.position.set(0, 0, 1);
+  bolt.mesh.material.opacity = 1;
+  bolt.angle = angle;
+  bolt.active = true;
+  bolt.trail = [];
+  playFire();
+}
+
+function spawnCrystals() {
+  const cfg = LEVELS[level];
+  const orbitR = Math.min(arenaW, arenaH) * 0.38;
+  for (let i = 0; i < cfg.crystals; i++) {
+    const c = crystalObjs[i];
+    if (!c) continue;
+    c.active = true;
+    c.orbitAngle = (i / cfg.crystals) * Math.PI * 2;
+    c.orbitRadius = orbitR * (0.8 + Math.random() * 0.3);
+    c.orbitSpeed = cfg.orbitSpeed * (0.8 + Math.random() * 0.4) * (Math.random() < 0.5 ? 1 : -1);
+    c.hp = i < cfg.shielded ? 2 : 1;
+    c.shielded = c.hp > 1;
+    c.mesh.material.color.set(c.shielded ? COLORS.shieldCrystal : COLORS.crystal);
+    c.mesh.material.opacity = 1;
+    c.shMesh.material.opacity = c.shielded ? 0.5 : 0;
+    const x = Math.cos(c.orbitAngle) * c.orbitRadius;
+    const y = Math.sin(c.orbitAngle) * c.orbitRadius;
+    c.mesh.position.set(x, y, 1);
+    c.shMesh.position.set(x, y, 1.1);
+  }
+  crystalsLeft = cfg.crystals;
+}
+
+function deactivateAllCrystals() {
+  crystalObjs.forEach(c => {
+    c.active = false;
+    c.mesh.material.opacity = 0;
+    c.shMesh.material.opacity = 0;
+  });
+}
+
+function deactivateAllBolts() {
+  bolts.forEach(b => {
+    b.active = false;
+    b.mesh.material.opacity = 0;
+  });
+  trailPool.forEach(t => { t.life = 0; t.mesh.material.opacity = 0; });
+}
+
+function shatterCrystal(c, bx, by) {
+  c.active = false;
+  c.mesh.material.opacity = 0;
+  c.shMesh.material.opacity = 0;
+  // spawn shatter particles
+  for (let i = 0; i < 8; i++) {
+    const p = getFreeParticle();
+    if (!p) continue;
+    const ang = (i / 8) * Math.PI * 2 + Math.random() * 0.5;
+    const spd = 60 + Math.random() * 100;
+    p.active = true;
+    p.vx = Math.cos(ang) * spd;
+    p.vy = Math.sin(ang) * spd;
+    p.mesh.position.set(bx, by, 2);
+    p.mesh.material.color.set(c.shielded ? COLORS.shieldCrystal : COLORS.crystal);
+    p.mesh.material.opacity = 1;
+    p.life = 0;
+    p.maxLife = 0.5 + Math.random() * 0.3;
+  }
+  playCrunch();
+  crystalsLeft--;
+  score += 100 + level * 50;
+  updateHUD();
+  if (crystalsLeft <= 0) {
+    // Level clear
+    playWin();
+    setTimeout(() => advanceLevel(), 800);
+  }
+}
+
+function advanceLevel() {
+  level++;
+  if (level >= LEVELS.length) {
+    // Game complete!
+    endGame(true);
+    return;
+  }
+  deactivateAllBolts();
+  deactivateAllCrystals();
+  spawnCrystals();
+  // Fire bolts for new level
+  const nBolts = LEVELS[level].bolts;
+  for (let i = 0; i < nBolts; i++) {
+    setTimeout(() => fireBolt(), i * 200);
+  }
+  showLevelAnn();
+  updateHUD();
+}
+
+function showLevelAnn() {
+  const ann = document.getElementById('levelAnn');
+  document.getElementById('laName').textContent = LEVELS[level].name;
+  ann.style.display = 'block';
+  ann.style.opacity = '1';
+  levelAnnTimer = 1.8;
+}
+
+function startGame() {
+  score = 0;
+  lives = 3;
+  level = 0;
+  gameState = 'playing';
+  deactivateAllBolts();
+  deactivateAllCrystals();
+  particles.forEach(p => { p.active = false; p.mesh.material.opacity = 0; });
+  spawnCrystals();
+  fireBolt();
+  updateHUD();
+  document.getElementById('hud').style.display = 'flex';
+  document.getElementById('credits').style.display = 'block';
+  document.getElementById('gameOver').style.display = 'none';
+  showLevelAnn();
+  startDrone();
+}
+
+function loseLife() {
+  lives--;
+  updateHUD();
+  playDeath();
+  cameraShakeTimer = 0.35;
+  cameraShakeMag = 6;
+
+  if (lives <= 0) {
+    setTimeout(() => endGame(false), 400);
+    return;
+  }
+  // Respawn bolt after 1.5 seconds
+  gameState = 'dying';
+  respawnTimer = 1.5;
+}
+
+function endGame(win) {
+  gameState = 'gameover';
+  deactivateAllBolts();
+  stopDrone();
+  saveHighScore(score);
+  document.getElementById('goScore').textContent = score;
+  document.getElementById('goBest').textContent = getHighScore();
+  const el = document.getElementById('gameOver');
+  el.style.display = 'flex';
+  const title = el.querySelector('.go-title');
+  title.textContent = win ? 'TOTAL FRACTURE' : 'SHATTERED';
+  title.style.color = win ? '#44FFAA' : '#FF2080';
+}
+
+function updateHUD() {
+  document.getElementById('scoreVal').textContent = score;
+  document.getElementById('levelVal').textContent = level + 1;
+  for (let i = 0; i < 3; i++) {
+    const el = document.getElementById(`life${i}`);
+    el.classList.toggle('dead', i >= lives);
+  }
+}
+
+// ─── Pointer Handling ────────────────────────────────────────────────────────
+function onPointerMove(e) {
+  const rect = canvas.getBoundingClientRect();
+  pointerX = e.clientX - rect.left - rect.width / 2;
+  pointerY = -(e.clientY - rect.top - rect.height / 2);
+  paddleAngle = Math.atan2(pointerY, pointerX);
+}
+
+function onPointerDown(e) {
+  const rect = canvas.getBoundingClientRect();
+  pointerX = e.clientX - rect.left - rect.width / 2;
+  pointerY = -(e.clientY - rect.top - rect.height / 2);
+  paddleAngle = Math.atan2(pointerY, pointerX);
+
+  if (gameState === 'idle') return; // handled by start screen
+  if (gameState === 'gameover') {
+    document.getElementById('gameOver').style.display = 'none';
+    startGame();
+  }
+}
+
+// Start screen
+document.getElementById('startScreen').addEventListener('pointerdown', () => {
+  gameState = 'playing'; // temporary, startGame sets properly
+  document.getElementById('startScreen').classList.add('hidden');
+  initAudio().catch(() => {});
+  startGame();
+}, { once: true });
+
+canvas.addEventListener('pointermove', onPointerMove);
+canvas.addEventListener('pointerdown', onPointerDown);
+canvas.addEventListener('pointercancel', () => {});
+
+// ─── Collision / Reflection ──────────────────────────────────────────────────
+function reflectBolt(bolt, nx, ny) {
+  // Reflect velocity off normal (nx, ny)
+  const dot = bolt.vx * nx + bolt.vy * ny;
+  bolt.vx -= 2 * dot * nx;
+  bolt.vy -= 2 * dot * ny;
+  bolt.angle = Math.atan2(bolt.vy, bolt.vx);
+  const notes = ['C5','E5','G5','B5','C6'];
+  playPing(notes[Math.floor(Math.random() * notes.length)]);
+}
+
+function checkBoltArena(bolt) {
+  const bx = bolt.mesh.position.x;
+  const by = bolt.mesh.position.y;
+  let reflected = false;
+
+  if (bx > arenaW/2) {
+    bolt.mesh.position.x = arenaW/2;
+    reflectBolt(bolt, -1, 0);
+    flashWall(1); reflected = true;
+  } else if (bx < -arenaW/2) {
+    bolt.mesh.position.x = -arenaW/2;
+    reflectBolt(bolt, 1, 0);
+    flashWall(3); reflected = true;
+  }
+
+  if (by > arenaH/2) {
+    bolt.mesh.position.y = arenaH/2;
+    reflectBolt(bolt, 0, -1);
+    flashWall(0); reflected = true;
+  } else if (by < -arenaH/2) {
+    // Bottom wall — but first check if paddle is here
+    // Actually arena bottom is floor: lose life if bolt escapes (bolt goes below arena bottom without paddle reflecting)
+    // The paddle is in the CENTER (0,0), not at the bottom.
+    // Bottom wall is just another wall.
+    bolt.mesh.position.y = -arenaH/2;
+    reflectBolt(bolt, 0, 1);
+    flashWall(2); reflected = true;
+  }
+
+  return reflected;
+}
+
+function checkBoltPaddle(bolt) {
+  const bx = bolt.mesh.position.x;
+  const by = bolt.mesh.position.y;
+  const px = 0, py = 0; // paddle center
+
+  const dx = bx - px, dy = by - py;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+
+  // Paddle is a bar, check if bolt is within paddle collision zone
+  const halfLen = paddleLen / 2 + 8;
+  const perpDist = Math.abs(dx * -Math.sin(paddleAngle) + dy * Math.cos(paddleAngle));
+  const paraLen = Math.abs(dx * Math.cos(paddleAngle) + dy * Math.sin(paddleAngle));
+
+  if (perpDist < 8 && paraLen < halfLen) {
+    // Reflect off paddle normal
+    const nx = -Math.sin(paddleAngle);
+    const ny = Math.cos(paddleAngle);
+    reflectBolt(bolt, nx, ny);
+    // Push bolt away from paddle
+    bolt.mesh.position.x += nx * 12;
+    bolt.mesh.position.y += ny * 12;
+    return true;
+  }
+  return false;
+}
+
+function checkBoltCrystals(bolt) {
+  const bx = bolt.mesh.position.x;
+  const by = bolt.mesh.position.y;
+
+  for (const c of crystalObjs) {
+    if (!c.active) continue;
+    const cx = c.mesh.position.x;
+    const cy = c.mesh.position.y;
+    const dx = bx - cx, dy = by - cy;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const hitR = c.shielded ? 20 : 16;
+    if (dist < hitR) {
+      if (c.shielded) {
+        // Break shield first
+        c.hp--;
+        c.shielded = false;
+        c.shMesh.material.opacity = 0;
+        c.mesh.material.color.set(COLORS.crystal);
+        // Deflect bolt
+        const nx = dx / dist, ny = dy / dist;
+        reflectBolt(bolt, nx, ny);
+        bolt.mesh.position.x += nx * 20;
+        bolt.mesh.position.y += ny * 20;
+      } else {
+        shatterCrystal(c, bx, by);
+        // Deflect bolt
+        const nx = dx / dist || 1, ny = dy / dist || 0;
+        reflectBolt(bolt, nx, ny);
+        bolt.mesh.position.x += nx * 20;
+        bolt.mesh.position.y += ny * 20;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+function flashWall(idx) {
+  if (wallFlashes[idx]) wallFlashes[idx].life = 0.12;
+}
+
+// ─── Idle Animation ──────────────────────────────────────────────────────────
+let idleTime = 0;
+const IDLE_CRYSTALS = 6;
+const idleCrystals = [];
+for (let i = 0; i < IDLE_CRYSTALS; i++) {
+  const geo = new THREE.BufferGeometry();
+  const verts = new Float32Array([
+    0, 10, 0,  7, 0, 0,  0, -8, 0,
+    0, 10, 0,  0, -8, 0, -7, 0, 0,
+  ]);
+  geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  const mat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geo, mat);
+  scene.add(mesh);
+  idleCrystals.push({ mesh, angle: (i / IDLE_CRYSTALS) * Math.PI * 2 });
+}
+
+// Idle bolt (single slow moving bolt)
+const idleBoltGeo = new THREE.PlaneGeometry(10, 3);
+const idleBoltMat = new THREE.MeshBasicMaterial({ color: COLORS.bolt, transparent: true, opacity: 0.6 });
+const idleBolt = new THREE.Mesh(idleBoltGeo, idleBoltMat);
+scene.add(idleBolt);
+let idleBoltX = 0, idleBoltY = 0, idleBoltVX = 120, idleBoltVY = 90;
+
+// ─── Animation Loop ──────────────────────────────────────────────────────────
+let lastTime = performance.now() / 1000;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const now = performance.now() / 1000;
+  const dt = Math.min(now - lastTime, 0.05);
+  lastTime = now;
+
+  if (gameState === 'idle') {
+    // Idle animation: slow orbiting crystals + slow drifting bolt
+    idleTime += dt;
+    const idleR = Math.min(arenaW, arenaH) * 0.32;
+    for (let i = 0; i < IDLE_CRYSTALS; i++) {
+      idleCrystals[i].angle += 0.20 * dt * (i % 2 === 0 ? 1 : -1);
+      const x = Math.cos(idleCrystals[i].angle) * idleR;
+      const y = Math.sin(idleCrystals[i].angle) * idleR;
+      idleCrystals[i].mesh.position.set(x, y, 0.5);
+      idleCrystals[i].mesh.rotation.z = idleCrystals[i].angle * 0.5;
+      // Pulse glow
+      idleCrystals[i].mesh.material.opacity = 0.15 + 0.2 * Math.sin(idleTime * 1.2 + i);
+    }
+
+    // Idle bolt bouncing slowly
+    idleBoltX += idleBoltVX * dt;
+    idleBoltY += idleBoltVY * dt;
+    if (idleBoltX > arenaW/2 - 10 || idleBoltX < -arenaW/2 + 10) idleBoltVX *= -1;
+    if (idleBoltY > arenaH/2 - 10 || idleBoltY < -arenaH/2 + 10) idleBoltVY *= -1;
+    idleBolt.position.set(idleBoltX, idleBoltY, 0.8);
+    idleBolt.rotation.z = Math.atan2(idleBoltVY, idleBoltVX);
+    idleBolt.material.opacity = 0.5 + 0.3 * Math.sin(idleTime * 3);
+
+    // Paddle slowly rotates
+    paddleMesh.rotation.z = Math.sin(idleTime * 0.4) * Math.PI * 0.4;
+    paddleMesh.position.set(0, 0, 0.9);
+    paddleMesh.material.opacity = 0.4;
+  } else {
+    // Hide idle elements
+    idleCrystals.forEach(c => c.mesh.material.opacity = 0);
+    idleBolt.material.opacity = 0;
+    paddleMesh.material.opacity = 1;
+
+    // Paddle follows pointer
+    paddleMesh.rotation.z = paddleAngle;
+    paddleMesh.position.set(0, 0, 0.9);
+
+    // Ring pulse
+    ringMesh.material.opacity = 0.15 + 0.1 * Math.sin(now * 3);
+  }
+
+  if (gameState === 'playing' || gameState === 'dying') {
+    // Level announcement fade
+    if (levelAnnTimer > 0) {
+      levelAnnTimer -= dt;
+      const ann = document.getElementById('levelAnn');
+      if (levelAnnTimer > 0.3) {
+        ann.style.opacity = Math.min(1, (1.8 - levelAnnTimer) * 4).toString();
+      } else {
+        ann.style.opacity = (levelAnnTimer / 0.3).toString();
+      }
+      if (levelAnnTimer <= 0) ann.style.display = 'none';
+    }
+
+    // Respawn timer
+    if (gameState === 'dying') {
+      respawnTimer -= dt;
+      if (respawnTimer <= 0) {
+        gameState = 'playing';
+        const nBolts = Math.min(LEVELS[level].bolts, lives);
+        fireBolt(LEVELS[level].boltSpeed * 0.75); // start slower
+      }
+    }
+
+    // Move bolts
+    bolts.forEach(bolt => {
+      if (!bolt.active) return;
+
+      const prevX = bolt.mesh.position.x;
+      const prevY = bolt.mesh.position.y;
+
+      bolt.mesh.position.x += bolt.vx * dt;
+      bolt.mesh.position.y += bolt.vy * dt;
+
+      // Trail
+      if (bolt.trail.length === 0 || Math.hypot(bolt.mesh.position.x - bolt.trail[0]?.x, bolt.mesh.position.y - bolt.trail[0]?.y) > 8) {
+        bolt.trail.unshift({ x: bolt.mesh.position.x, y: bolt.mesh.position.y });
+        if (bolt.trail.length > 6) bolt.trail.pop();
+      }
+
+      bolt.mesh.rotation.z = Math.atan2(bolt.vy, bolt.vx);
+
+      checkBoltArena(bolt);
+      checkBoltPaddle(bolt);
+      checkBoltCrystals(bolt);
+    });
+
+    // Update trail particles (reuse trailPool)
+    let trailIdx = 0;
+    bolts.forEach(bolt => {
+      if (!bolt.active) return;
+      bolt.trail.forEach((tp, i) => {
+        if (trailIdx >= trailPool.length) return;
+        const t = trailPool[trailIdx++];
+        t.mesh.position.set(tp.x, tp.y, 0.5);
+        t.mesh.material.opacity = (1 - i / 6) * 0.4;
+        t.mesh.rotation.z = bolt.mesh.rotation.z;
+        t.mesh.scale.setScalar(1 - i * 0.15);
+      });
+    });
+    // Hide unused trails
+    for (let i = trailIdx; i < trailPool.length; i++) {
+      trailPool[i].mesh.material.opacity = 0;
+    }
+
+    // Update crystals (orbit)
+    crystalObjs.forEach(c => {
+      if (!c.active) return;
+      c.orbitAngle += c.orbitSpeed * dt;
+      const x = Math.cos(c.orbitAngle) * c.orbitRadius;
+      const y = Math.sin(c.orbitAngle) * c.orbitRadius;
+      c.mesh.position.set(x, y, 1);
+      c.shMesh.position.set(x, y, 1.1);
+      c.mesh.rotation.z = c.orbitAngle * 0.5;
+    });
+
+    // Update shatter particles
+    particles.forEach(p => {
+      if (!p.active) return;
+      p.life += dt;
+      if (p.life >= p.maxLife) {
+        p.active = false;
+        p.mesh.material.opacity = 0;
+        return;
+      }
+      const t = p.life / p.maxLife;
+      p.mesh.position.x += p.vx * dt;
+      p.mesh.position.y += p.vy * dt;
+      p.vx *= 0.95;
+      p.vy *= 0.95;
+      p.mesh.material.opacity = 1 - t;
+      p.mesh.rotation.z += dt * 5;
+    });
+
+    // Wall flashes
+    wallFlashes.forEach(wf => {
+      if (wf.life > 0) {
+        wf.life -= dt;
+        wf.mesh.material.opacity = Math.max(0, wf.life / 0.12 * 0.6);
+      }
+    });
+
+    // Camera shake
+    if (cameraShakeTimer > 0) {
+      cameraShakeTimer -= dt;
+      const mag = cameraShakeMag * (cameraShakeTimer / 0.35);
+      group.position.x = (Math.random() - 0.5) * mag;
+      group.position.y = (Math.random() - 0.5) * mag;
+    } else {
+      group.position.set(0, 0, 0);
+    }
+  }
+
+  composer.render();
+}
+
+// ─── Resize ──────────────────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  W = window.innerWidth; H = window.innerHeight;
+  renderer.setSize(W, H);
+  camera.left = -W/2; camera.right = W/2;
+  camera.top = H/2; camera.bottom = -H/2;
+  camera.updateProjectionMatrix();
+  composer.setSize(W, H);
+});
+
+animate();
+</script>
+<a href="https://github.com/nishivector/mirror-strike" target="_blank" style="position:fixed;bottom:16px;right:16px;color:rgba(255,255,255,0.3);font-size:11px;text-decoration:none;font-family:monospace;z-index:1000;">GitHub ↗</a>
+</body>
+</html>
